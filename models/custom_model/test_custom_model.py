@@ -38,19 +38,20 @@ def run_model(batch) -> HeteroData:
     with torch.no_grad():
         model = CustomModel()
         model.eval()
-        output = model(batch=batch)
-    print(output)
+
+        output = model(x=batch["inputs"])
+    print(f"Output Shape: {output.shape}")
     return output
 
 
 def run_loss_and_metrics(output, batch) -> None:
     """Test the affinity loss and metrics."""
-    loss_dict = compute_loss(logits=output, batch_data=batch)
+    loss_dict = compute_loss(model_output=output, batch_data=batch)
     df_loss = pd.DataFrame(loss_dict, index=[0])
     print("\nLoss:")
     print(df_loss)
 
-    metrics_dict = compute_metrics(logits=output, batch_data=batch)
+    metrics_dict = compute_metrics(model_output=output, batch_data=batch)
     df_metrics = pd.DataFrame(metrics_dict, index=[0])
 
     print("\nMetrics:")
@@ -60,4 +61,4 @@ def run_loss_and_metrics(output, batch) -> None:
 if __name__ == "__main__":
     batch = get_batch()
     output = run_model(batch)
-    run_loss_and_metrics(output, batch)
+    run_loss_and_metrics(output=output, batch=batch)

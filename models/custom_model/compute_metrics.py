@@ -3,6 +3,7 @@
 from typing import Any
 
 import torch
+import torchmetrics
 
 
 def compute_metrics(
@@ -17,13 +18,19 @@ def compute_metrics(
     Returns:
         dict[str, torch.Tensor]: The step metrics.
     """
-    logits: torch.Tensor = None
+    logits: torch.Tensor = model_output.squeeze()
 
     # Extract ground truth labels from batch data
-    gt_labels: torch.Tensor = None
+    gt_labels: torch.Tensor = batch_data["labels"].float()
 
     # Metrics
-    metrics: dict[str, torch.Tensor] = None
+    metrics: dict[str, torch.Tensor] = {
+        "accuracy": torchmetrics.functional.accuracy(logits, gt_labels, task="binary"),
+        "precision": torchmetrics.functional.precision(
+            logits, gt_labels, task="binary"
+        ),
+        "recall": torchmetrics.functional.recall(logits, gt_labels, task="binary"),
+        "f1_score": torchmetrics.functional.f1_score(logits, gt_labels, task="binary"),
+    }
 
-    step_metrics: dict[str, torch.Tensor] = {**metrics}
-    return step_metrics
+    return metrics

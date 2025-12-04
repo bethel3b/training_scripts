@@ -10,8 +10,8 @@ class CustomModel(nn.Module):
     def __init__(self) -> None:
         """Initialize the model."""
         super().__init__()
-        pass
+        self.layer = nn.Linear(in_features=10, out_features=1)
 
-    def forward(self) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass."""
-        pass
+        return self.layer(x)

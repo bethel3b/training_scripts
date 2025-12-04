@@ -2,6 +2,7 @@
 
 import logging
 
+import torch
 from torch.utils.data import DataLoader, Dataset
 
 # Configure logging
@@ -16,11 +17,12 @@ class CustomDataset(Dataset):
 
     def __init__(self) -> None:
         """Initialize the dataset."""
-        pass
+        self.inputs = torch.randn(100, 10)
+        self.labels = torch.randint(0, 2, (100,))
 
     def __len__(self) -> int:
         """Return the length of the dataset."""
-        pass
+        return len(self.inputs)
 
     def __getitem__(self, idx: int) -> dict[str, list[int]]:
         """Return the item at the given index.
@@ -31,7 +33,10 @@ class CustomDataset(Dataset):
         Returns:
             dict[str, list[int]]: The item at the given index.
         """
-        pass
+        return {
+            "inputs": self.inputs[idx],
+            "labels": self.labels[idx],
+        }
 
 
 def custom_training_dataloader(
