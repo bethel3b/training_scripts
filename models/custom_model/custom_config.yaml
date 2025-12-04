@@ -1,0 +1,26 @@
+cuda: 0
+batch_size: 2
+
+# Model specific config -- Example
+model: 
+  num_layers: 6
+
+# Training specific config - optimizer, lr scheduler, etc.
+training:
+  total_epochs: 2
+  lr: 0.001
+
+# Data directory config
+data_dir:
+  input_dir: ""
+
+# Training output directory config
+training_dir:
+  output_dir: "results/custom_model"
+
+# Eval output directory config - fill after training
+eval_dir:
+  eval_output_dir: ""
+  best_model_path: ""
+ 
+
