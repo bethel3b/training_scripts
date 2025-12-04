@@ -76,7 +76,9 @@ class Training:
         optimizer: optim.Optimizer = optim.AdamW(params=model.parameters(), lr=self.lr)
 
         logger.info("Initializing LR Scheduler...")
-        scheduler: optim.lr_scheduler = optim.lr_scheduler.StepLR(optimizer=optimizer)
+        scheduler: optim.lr_scheduler = optim.lr_scheduler.StepLR(
+            optimizer=optimizer, step_size=10, gamma=0.1
+        )
         return model, optimizer, scheduler
 
     def run(self) -> None:
