@@ -15,6 +15,38 @@
                 "PYTHONPATH": "${workspaceFolder}"
             },
             "justMyCode": false
+        },
+        {
+            "name": "Train Custom Model",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "models/custom_model/train.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "justMyCode": false,
+            "args": [
+                "-c",
+                "models/custom_model/config.yaml"
+            ]
+        },
+        {
+            "name": "Evaluate Custom Model",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "models/custom_model/eval.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "justMyCode": false,
+            "args": [
+                "-c",
+                "models/custom_model/config.yaml"
+            ]
         }
     ]
 }
