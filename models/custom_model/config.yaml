@@ -26,4 +26,9 @@ eval_dir:
   eval_output_dir: "results/custom_model/12-05_14-02-43"
   best_model_path: "results/custom_model/12-05_14-02-43/training_results/checkpoints/best_model.pth"
  
-
+accelerator:
+  project_dir: "results/custom_model_acc/"
+  log_with: "tensorboard"
+  gradient_accumulation_steps: 4
+  mixed_precision: "no"
+  ddp_find_unused_parameters: true

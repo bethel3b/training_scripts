@@ -55,7 +55,7 @@ def custom_evaluation_dataloader(
     test_set: CustomDataset, batch_size: int
 ) -> DataLoader:
     """Initialize PyTorch DataLoader for custom evaluation dataset."""
-    logger.info("Initializing Dataloader...")
+    logger.info("Initializing Dataloader...\n")
 
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
     return test_loader
@@ -64,3 +64,8 @@ def custom_evaluation_dataloader(
 def custom_input_fn(batch_data: dict[str, torch.Tensor], device: str) -> torch.Tensor:
     """Get input data from batch data."""
     return batch_data["inputs"].to(device)
+
+
+def custom_input_fn_acc(batch_data: dict[str, torch.Tensor]) -> torch.Tensor:
+    """Get input data from batch data."""
+    return batch_data["inputs"]

@@ -4,18 +4,15 @@ import logging
 from typing import Callable
 
 import torch
+from accelerate import Accelerator
 from torch import nn, optim
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from utils.trainer_utils import (
-    calculate_grad_norm,
+from utils.accelerator_utils import (
     save_best_model,
     save_checkpoint,
     save_final_model,
-    visulaize,
-    write_to_tensorboard,
 )
 
 # Configure logging
@@ -30,11 +27,8 @@ class Trainer:
 
     def __init__(
         self,
+        accelerator: Accelerator,
         model: nn.Module,
-        device: str,
-        tensorboard_dir: str,
-        result_dir: str,
-        checkpoint_dir: str | None = None,
         train_loader: DataLoader | None = None,
         val_loader: DataLoader | None = None,
         test_loader: DataLoader | None = None,
@@ -46,9 +40,14 @@ class Trainer:
         loss_fn: Callable = None,
         metrics_fn: Callable = None,
         input_fn: Callable = None,
+        checkpoint_dir: str | None = None,
+        checkpoint_every_n_epochs: int = 1,
     ):
         """Initialize the Trainer class."""
         self.is_eval = True if test_loader is not None else False
+
+        self.accelerator = accelerator
+        self.device = self.accelerator.device
 
         # DataLoader
         self.train_loader = train_loader
@@ -63,13 +62,6 @@ class Trainer:
         # Hyperparameters
         self.total_epochs = total_epochs
         self.gradient_clip_value = gradient_clip_value
-        self.steps_to_accumulate = steps_to_accumulate
-
-        # Other
-        self.device = device
-        self.checkpoint_dir = checkpoint_dir
-        self.tensorboard_dir = tensorboard_dir
-        self.result_dir = result_dir
 
         # Input, loss, and metrics functions
         self.input_fn = input_fn
@@ -77,12 +69,10 @@ class Trainer:
         self.metrics_fn = metrics_fn
 
         self.sigmoid = nn.Sigmoid()
-        self.model.to(self.device)
 
-        # Tensorboard
-        self.writer = None
-        if self.tensorboard_dir:
-            self.writer = SummaryWriter(self.tensorboard_dir)
+        # Output directories
+        self.checkpoint_dir = checkpoint_dir
+        self.checkpoint_every_n_epochs = checkpoint_every_n_epochs
 
         # Best model
         self.best_val_loss: float = float("inf")
@@ -114,15 +104,17 @@ class Trainer:
 
         # Progress bar
         total_batches = len(loader)
-        progress_bar = tqdm(loader, desc=mode, leave=True)
+        progress_bar = tqdm(
+            loader,
+            desc=mode,
+            leave=True,
+            disable=not self.accelerator.is_local_main_process,
+        )
 
         # Iterate over loader
         for batch_idx, batch_data in enumerate(progress_bar):
-            # Current step
-            cur_step = batch_idx + (epoch - 1) * total_batches
-
             # Get input data
-            input_data = self.input_fn(batch_data, device=self.device)
+            input_data = self.input_fn(batch_data)
 
             # Forward Pass
             output = self.model(input_data)
@@ -151,21 +143,8 @@ class Trainer:
             # Backward Pass (training only)
             if self.model.training:
                 self.optimizer.zero_grad()
-                loss.backward()
-                total_grad_norm = calculate_grad_norm(model=self.model, norm_type=2)
+                self.accelerator.backward(loss)
                 self.optimizer.step()
-
-            # Write to tensorboard
-            if self.tensorboard_dir is not None:
-                write_to_tensorboard(
-                    epoch=cur_step,
-                    epoch_loss=step_loss,
-                    epoch_metrics=step_metrics,
-                    grad_norm=total_grad_norm if self.model.training else None,
-                    writer=self.writer,
-                    mode=mode,
-                    is_step=True,
-                )
 
             # Update progress bar with current batch loss
             lr = self.optimizer.param_groups[0]["lr"] if self.model.training else None
@@ -184,69 +163,92 @@ class Trainer:
 
     def train_and_validate(self) -> None:
         """Run complete training and validation process."""
-        logger.info(
-            f"Starting training for {self.total_epochs} epochs on {self.device}\n"
-        )
+        if self.accelerator.is_local_main_process:
+            logger.info(
+                f"Starting training for {self.total_epochs} epochs on {self.device}\n"
+            )
 
         # Initial validation and log result
-        logger.info("Initial validation before training...")
+        if self.accelerator.is_local_main_process:
+            logger.info("Initial validation before training...")
+
         with torch.no_grad():
             # Set model to evaluation mode
             self.model.eval()
             init_epoch_loss, init_epoch_metrics = self._epoch(epoch=0)
+            # Log initial validation results
+            log_dict = {f"val/{k}": v for k, v in init_epoch_loss.items()}
+            if init_epoch_metrics:
+                log_dict.update({f"val/{k}": v for k, v in init_epoch_metrics.items()})
+            self.accelerator.log(log_dict, step=0)
 
-            visulaize(
-                epoch=0,
-                epoch_loss=init_epoch_loss,
-                epoch_metrics=init_epoch_metrics,
-                mode="Validation",
-                lr_scheduler=self.lr_scheduler,
-                writer=self.writer,
-                result_dir=self.result_dir,
-                tensorboard_dir=self.tensorboard_dir,
-            )
+            if self.accelerator.is_local_main_process:
+                logger.info(f"Initial Validation - Loss: {init_epoch_loss}")
+                if init_epoch_metrics:
+                    logger.info(f"Initial Validation - Metrics: {init_epoch_metrics}")
 
         # Train for total_epochs epochs and validate at each epoch
         for epoch in range(1, self.total_epochs + 1):
-            logger.info(f"Epoch [{epoch}]")
+            if self.accelerator.is_local_main_process:
+                logger.info(f"Epoch [{epoch}]")
             # Training phase
             # Set model to training mode
             self.model.train()
-            train_epoch_loss, train_epoch_metrics = self._epoch(epoch=epoch)
-            visulaize(
-                epoch=epoch,
-                epoch_loss=train_epoch_loss,
-                epoch_metrics=train_epoch_metrics,
-                mode="Train",
-                lr_scheduler=self.lr_scheduler,
-                writer=self.writer,
-                result_dir=self.result_dir,
-                tensorboard_dir=self.tensorboard_dir,
-            )
+
+            with self.accelerator.accumulate(self.model):
+                train_epoch_loss, train_epoch_metrics = self._epoch(epoch=epoch)
+
+            # Log training results
+            log_dict = {f"train/{k}": v for k, v in train_epoch_loss.items()}
+            if train_epoch_metrics:
+                log_dict.update(
+                    {f"train/{k}": v for k, v in train_epoch_metrics.items()}
+                )
+            log_dict["train/learning_rate"] = self.optimizer.param_groups[0]["lr"]
 
             # Validation phase
             with torch.no_grad():
                 # Set model to evaluation mode
                 self.model.eval()
                 val_epoch_loss, val_epoch_metrics = self._epoch(epoch=epoch)
-                visulaize(
-                    epoch=epoch,
-                    epoch_loss=val_epoch_loss,
-                    epoch_metrics=val_epoch_metrics,
-                    mode="Validation",
-                    lr_scheduler=self.lr_scheduler,
-                    writer=self.writer,
-                    result_dir=self.result_dir,
-                    tensorboard_dir=self.tensorboard_dir,
-                )
+
+                # Add validation results to log dict
+                log_dict.update({f"val/{k}": v for k, v in val_epoch_loss.items()})
+                if val_epoch_metrics:
+                    log_dict.update(
+                        {f"val/{k}": v for k, v in val_epoch_metrics.items()}
+                    )
+
+            # Log to TensorBoard
+            self.accelerator.log(log_dict, step=epoch)
+
+            # Log to terminal
+            if self.accelerator.is_local_main_process:
+                logger.info(f"Train Loss: {train_epoch_loss}")
+                if train_epoch_metrics:
+                    logger.info(f"Train Metrics: {train_epoch_metrics}")
+                logger.info(f"Val Loss: {val_epoch_loss}")
+                if val_epoch_metrics:
+                    logger.info(f"Val Metrics: {val_epoch_metrics}")
 
             # Update learning rate
             self.lr_scheduler.step()
 
             # Save model checkpoint
-            if self.checkpoint_dir:
+            self.accelerator.wait_for_everyone()
+
+            # Save model checkpoint
+            if (
+                self.checkpoint_dir
+                and epoch % self.checkpoint_every_n_epochs == 0
+                and self.accelerator.is_local_main_process
+            ):
+                model = self.accelerator.unwrap_model(self.model)
                 save_checkpoint(
-                    checkpoint_dir=self.checkpoint_dir, epoch=epoch, model=self.model
+                    accelerator=self.accelerator,
+                    checkpoint_dir=self.checkpoint_dir,
+                    epoch=epoch,
+                    model=model,
                 )
 
             # Update best model checkpoint
@@ -257,16 +259,21 @@ class Trainer:
 
         # Save final and best model
         if self.checkpoint_dir:
-            save_final_model(checkpoint_dir=self.checkpoint_dir, model=self.model)
-            save_best_model(
+            model = self.accelerator.unwrap_model(self.model)
+            best_model = self.accelerator.unwrap_model(self.best_model)
+            save_final_model(
+                accelerator=self.accelerator,
                 checkpoint_dir=self.checkpoint_dir,
-                best_model=self.best_model,
+                model=model,
+            )
+            save_best_model(
+                accelerator=self.accelerator,
+                checkpoint_dir=self.checkpoint_dir,
+                best_model=best_model,
                 best_epoch=self.best_epoch,
             )
 
-        # Close tensorboard writer
-        if self.tensorboard_dir:
-            self.writer.close()
+        self.accelerator.end_training()
         return
 
     def evaluate(self) -> None:
@@ -276,12 +283,13 @@ class Trainer:
             # Set model to evaluation mode
             self.model.eval()
             eval_epoch_loss, eval_epoch_metrics = self._epoch(epoch=0)
-            visulaize(
-                epoch=0,
-                epoch_loss=eval_epoch_loss,
-                epoch_metrics=eval_epoch_metrics,
-                mode="Evaluation",
-                writer=self.writer,
-                result_dir=self.result_dir,
-                tensorboard_dir=self.tensorboard_dir,
-            )
+            # Log evaluation results
+            log_dict = {f"eval/{k}": v for k, v in eval_epoch_loss.items()}
+            if eval_epoch_metrics:
+                log_dict.update({f"eval/{k}": v for k, v in eval_epoch_metrics.items()})
+            self.accelerator.log(log_dict, step=0)
+
+            if self.accelerator.is_local_main_process:
+                logger.info(f"Evaluation - Loss: {eval_epoch_loss}")
+                if eval_epoch_metrics:
+                    logger.info(f"Evaluation - Metrics: {eval_epoch_metrics}")
