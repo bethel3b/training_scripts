@@ -17,9 +17,11 @@ class CustomDataset(Dataset):
 
     def __init__(self, input_path: str) -> None:
         """Initialize the dataset."""
+        logger.info(f"Loading dataset from {input_path}...")
         self.dataset = torch.load(input_path)
         self.inputs = self.dataset["inputs"]
         self.labels = self.dataset["labels"]
+        logger.info(f"Loaded dataset with size: {len(self.inputs)} samples!")
 
     def __len__(self) -> int:
         """Return the length of the dataset."""

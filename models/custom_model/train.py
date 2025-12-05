@@ -17,7 +17,7 @@ from models.custom_model.custom_dataset import (
 )
 from models.custom_model.custom_model import CustomModel
 from scripts.trainer import Trainer
-from utils.dir_utils import training_output_dir
+from utils.dir_utils import dump_config, training_output_dir
 from utils.model_utils import log_parameter_counts
 from utils.utils import elapsed_time
 
@@ -37,7 +37,7 @@ class Training:
         self.config = config
 
     def _load_configs(self) -> None:
-        """Load and set all Configurations."""
+        """Load all configurations from config file."""
         logger.info("Loading Configurations...\n")
 
         # Data directory
@@ -57,9 +57,13 @@ class Training:
         training_config = self.config["training"]
         self.total_epochs: int = training_config["total_epochs"]
         self.lr: float = float(training_config["lr"])
+
         # Training directory
         training_dir_config = self.config["training_dir"]
         self.output_dir: str = training_dir_config["output_dir"]
+        self.checkpoint_every_n_epochs: int = training_dir_config[
+            "checkpoint_every_n_epochs"
+        ]
 
     def _load_datasets(self) -> tuple[CustomDataset, CustomDataset]:
         """Load training and validation datasets."""
@@ -104,6 +108,9 @@ class Training:
             checkpoint_dir, tensorboard_dir, result_dir = training_output_dir(
                 output_dir=self.output_dir
             )
+            dump_config(
+                config=self.config, result_dir=result_dir, checkpoint_dir=checkpoint_dir
+            )
 
         # Initialize datasets
         train_set, valid_set = self._load_datasets()
@@ -131,6 +138,7 @@ class Training:
             input_fn=custom_input_fn,
             loss_fn=compute_loss,
             metrics_fn=compute_metrics,
+            checkpoint_every_n_epochs=self.checkpoint_every_n_epochs,
         )
         # Execute training loop
         trainer.train_and_validate()
@@ -142,8 +150,6 @@ def get_args() -> argparse.Namespace:
     Returns:
         argparse.Namespace: Parsed arguments containing:
             - config (str): Path to YAML configuration file
-            - model_type (str): Model architecture variant identifier
-            - training_dataset (str): Dataset identifier from config
     """
     parser = argparse.ArgumentParser(
         description="Train Transformer model for neural machine translation."

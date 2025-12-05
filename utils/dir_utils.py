@@ -4,6 +4,8 @@ import logging
 import os
 from datetime import datetime
 
+import yaml
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -61,3 +63,19 @@ def evaluation_output_dir(output_dir: str) -> tuple[str, str]:
         f"\tTraining Results Dir: {result_dir}\n"
     )
     return tensorboard_dir, result_dir
+
+
+def dump_config(config: dict, result_dir: str, checkpoint_dir: str) -> None:
+    """Dump configurations to file."""
+    # Dump configurations to file
+    config_path = os.path.join(result_dir, "config.yaml")
+    config_to_append = {
+        "eval_dir": {
+            "eval_output_dir": result_dir,
+            "best_model_path": os.path.join(checkpoint_dir, "best_model.pth"),
+        }
+    }
+    new_config = {**config, **config_to_append}
+
+    with open(config_path, "w") as file:
+        yaml.dump(new_config, file)

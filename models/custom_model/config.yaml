@@ -20,11 +20,7 @@ data_dir:
 # Training output directory config
 training_dir:
   output_dir: "results/custom_model"
-
-# Eval output directory config - fill after training
-eval_dir:
-  eval_output_dir: "results/custom_model/12-05_14-02-43"
-  best_model_path: "results/custom_model/12-05_14-02-43/training_results/checkpoints/best_model.pth"
+  checkpoint_every_n_epochs: 1
  
 accelerator:
   project_dir: "results/custom_model_acc/"

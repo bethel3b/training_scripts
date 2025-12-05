@@ -46,6 +46,7 @@ class Trainer:
         loss_fn: Callable = None,
         metrics_fn: Callable = None,
         input_fn: Callable = None,
+        checkpoint_every_n_epochs: int = 1,
     ):
         """Initialize the Trainer class."""
         self.is_eval = True if test_loader is not None else False
@@ -70,6 +71,7 @@ class Trainer:
         self.checkpoint_dir = checkpoint_dir
         self.tensorboard_dir = tensorboard_dir
         self.result_dir = result_dir
+        self.checkpoint_every_n_epochs = checkpoint_every_n_epochs
 
         # Input, loss, and metrics functions
         self.input_fn = input_fn
