@@ -1,15 +1,18 @@
 """Test modules for the custom model."""
 
 import time
+from typing import Any
 
 import pandas as pd
 import torch
 from torch_geometric.data import HeteroData
-from torch_geometric.loader import DataLoader
 
 from models.custom_model.compute_loss import compute_loss
 from models.custom_model.compute_metrics import compute_metrics
-from models.custom_model.custom_dataset import CustomDataset
+from models.custom_model.custom_dataset import (
+    CustomDataset,
+    custom_evaluation_dataloader,
+)
 from models.custom_model.custom_model import CustomModel
 from utils.utils import elapsed_time
 
@@ -20,11 +23,11 @@ def get_batch() -> HeteroData:
     # Example usage
     print("=" * 100)
     print("\nLoading dataset...")
-    dataset = CustomDataset()
+    dataset = CustomDataset(input_path="data/sample_train_data.pt")
 
     # Test dataloader batching
     print("\nBatch from DataLoader:")
-    loader = DataLoader(dataset, batch_size=8, shuffle=False)
+    loader = custom_evaluation_dataloader(dataset, batch_size=8)
     batch = next(iter(loader))
     print(batch)
 
@@ -33,7 +36,7 @@ def get_batch() -> HeteroData:
     return batch
 
 
-def run_model(batch) -> HeteroData:
+def run_model(batch: Any) -> HeteroData:
     """Test the custom model."""
     with torch.no_grad():
         model = CustomModel()
@@ -44,7 +47,7 @@ def run_model(batch) -> HeteroData:
     return output
 
 
-def run_loss_and_metrics(output, batch) -> None:
+def run_loss_and_metrics(output: Any, batch: Any) -> None:
     """Test the affinity loss and metrics."""
     loss_dict = compute_loss(model_output=output, batch_data=batch)
     df_loss = pd.DataFrame(loss_dict, index=[0])

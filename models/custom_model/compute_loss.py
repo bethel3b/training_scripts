@@ -19,7 +19,7 @@ def compute_loss(model_output: Any, batch_data: Any = None) -> dict[str, torch.T
     logits: torch.Tensor = model_output.squeeze()
 
     # Extract ground truth labels from batch data
-    gt_labels: torch.Tensor = batch_data["labels"].float()
+    gt_labels: torch.Tensor = batch_data["labels"].float().to(logits.device)
 
     # Loss
     losses: dict[str, torch.Tensor] = {
@@ -28,11 +28,10 @@ def compute_loss(model_output: Any, batch_data: Any = None) -> dict[str, torch.T
     }
 
     # Total loss
-    total_loss: torch.Tensor = 0.0
+    total_loss: torch.Tensor = torch.tensor(0.0, device=logits.device)
     for key, value in losses.items():
-        total_loss += value.item()
+        total_loss += value
 
-    # append pocket_losses and affinity_losses
-    step_loss: dict[str, torch.Tensor] = {**losses, "total_loss": total_loss}
+    losses["total_loss"] = total_loss
 
-    return step_loss
+    return losses

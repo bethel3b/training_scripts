@@ -13,13 +13,12 @@ from models.custom_model.compute_metrics import compute_metrics
 from models.custom_model.custom_dataset import (
     CustomDataset,
     custom_evaluation_dataloader,
+    custom_input_fn,
 )
 from models.custom_model.custom_model import CustomModel
-from utils.run_utils import (
-    evaluation_output_dir,
-    log_parameter_counts,
-)
-from utils.trainer import Trainer
+from scripts.trainer import Trainer
+from utils.dir_utils import evaluation_output_dir
+from utils.model_utils import log_parameter_counts
 from utils.utils import elapsed_time
 
 # Configure logging
@@ -30,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 class Evaluation:
-    """Run orchestrator for Custom Model."""
+    """Run orchestrator for Custom Model Evaluation."""
 
     def __init__(self, config: dict, save_results: bool = False) -> None:
         """Initialize the Run orchestrator."""
@@ -38,12 +37,12 @@ class Evaluation:
         self.config = config
 
     def _load_configs(self) -> None:
-        """Load and set all hyperparameters."""
-        logger.info("Loading Hyperparameters...")
+        """Load and set all Configurations."""
+        logger.info("Loading Configurations...\n")
 
         # Data directory
         data_dir_config = self.config["data_dir"]
-        self.input_dir: str = data_dir_config["input_dir"]
+        self.input_dir: dict[str, str] = data_dir_config["input_dir"]
 
         # Models
         self.model_config = self.config["model"]
@@ -58,24 +57,26 @@ class Evaluation:
         self.eval_output_dir: str = eval_dir["eval_output_dir"]
         self.best_model_path: str = eval_dir["best_model_path"]
 
-    def _load_evaluation_dataset(self) -> CustomDataset:
+    def _load_datasets(self) -> tuple[CustomDataset, CustomDataset]:
         """Load evaluation dataset."""
-        logger.info("Loading Evaluation Dataset...")
-        test_set = CustomDataset()
+        logger.info("Loading Evaluation Dataset...\n")
+        test_set = CustomDataset(input_path=self.input_dir["test_path"])
         return test_set
 
     def _initialize_model(
         self,
     ) -> tuple[nn.Module, optim.Optimizer, optim.lr_scheduler, dict[str, nn.Module]]:
         """Initialize Binding Affinity Prediction Model."""
-        logger.info("Initializing Model...")
+        logger.info("Initializing Model...\n")
         model: nn.Module = CustomModel()
         log_parameter_counts(model)
         return model
 
     def run(self) -> None:
         """Execute the complete evaluation pipeline."""
+        logger.info("=" * 100)
         logger.info("Evaluation Pipeline Starting...")
+        logger.info("=" * 100 + "\n")
         # Initialize hyperparameters
         self._load_configs()
 
@@ -87,7 +88,7 @@ class Evaluation:
             )
 
         # Initialize datasets
-        test_set = self._load_evaluation_dataset()
+        test_set = self._load_datasets()
 
         # Initialize dataloaders
         test_loader = custom_evaluation_dataloader(
@@ -104,6 +105,7 @@ class Evaluation:
             device=self.device,
             tensorboard_dir=tensorboard_dir,
             result_dir=result_dir,
+            input_fn=custom_input_fn,
             loss_fn=compute_loss,
             metrics_fn=compute_metrics,
         )

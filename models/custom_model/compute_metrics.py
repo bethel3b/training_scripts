@@ -21,7 +21,7 @@ def compute_metrics(
     logits: torch.Tensor = model_output.squeeze()
 
     # Extract ground truth labels from batch data
-    gt_labels: torch.Tensor = batch_data["labels"].float()
+    gt_labels: torch.Tensor = batch_data["labels"].float().to(logits.device)
 
     # Metrics
     metrics: dict[str, torch.Tensor] = {

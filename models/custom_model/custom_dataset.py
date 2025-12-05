@@ -15,10 +15,11 @@ logger = logging.getLogger(__name__)
 class CustomDataset(Dataset):
     """A PyTorch dataset wrapper for custom dataset."""
 
-    def __init__(self) -> None:
+    def __init__(self, input_path: str) -> None:
         """Initialize the dataset."""
-        self.inputs = torch.randn(100, 10)
-        self.labels = torch.randint(0, 2, (100,))
+        self.dataset = torch.load(input_path)
+        self.inputs = self.dataset["inputs"]
+        self.labels = self.dataset["labels"]
 
     def __len__(self) -> int:
         """Return the length of the dataset."""
@@ -58,3 +59,8 @@ def custom_evaluation_dataloader(
 
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
     return test_loader
+
+
+def custom_input_fn(batch_data: dict[str, torch.Tensor], device: str) -> torch.Tensor:
+    """Get input data from batch data."""
+    return batch_data["inputs"].to(device)

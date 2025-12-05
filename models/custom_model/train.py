@@ -8,10 +8,17 @@ import torch
 import yaml
 from torch import nn, optim
 
-from models.custom_model.custom_dataset import CustomDataset, custom_training_dataloader
+from models.custom_model.compute_loss import compute_loss
+from models.custom_model.compute_metrics import compute_metrics
+from models.custom_model.custom_dataset import (
+    CustomDataset,
+    custom_input_fn,
+    custom_training_dataloader,
+)
 from models.custom_model.custom_model import CustomModel
-from utils.run_utils import log_parameter_counts, training_output_dir
-from utils.trainer import Trainer
+from scripts.trainer import Trainer
+from utils.dir_utils import training_output_dir
+from utils.model_utils import log_parameter_counts
 from utils.utils import elapsed_time
 
 # Configure logging
@@ -30,12 +37,12 @@ class Training:
         self.config = config
 
     def _load_configs(self) -> None:
-        """Load and set all hyperparameters."""
-        logger.info("Loading Hyperparameters...")
+        """Load and set all Configurations."""
+        logger.info("Loading Configurations...\n")
 
         # Data directory
         data_dir_config = self.config["data_dir"]
-        self.input_dir: str = data_dir_config["input_dir"]
+        self.input_dir: dict[str, str] = data_dir_config["input_dir"]
 
         # Models
         self.model_config = self.config["model"]
@@ -54,28 +61,29 @@ class Training:
         training_dir_config = self.config["training_dir"]
         self.output_dir: str = training_dir_config["output_dir"]
 
-    def _load_training_dataset(self) -> tuple[CustomDataset, CustomDataset]:
+    def _load_datasets(self) -> tuple[CustomDataset, CustomDataset]:
         """Load training and validation datasets."""
         logger.info("Loading Datasets...")
-        train_set = CustomDataset()
-        valid_set = CustomDataset()
+
+        train_set = CustomDataset(input_path=self.input_dir["train_path"])
+        valid_set = CustomDataset(input_path=self.input_dir["valid_path"])
 
         logger.info(f"Train set: {len(train_set):,} examples")
-        logger.info(f"Validation set: {len(valid_set):,} examples")
+        logger.info(f"Validation set: {len(valid_set):,} examples\n")
         return train_set, valid_set
 
     def _initialize_model(
         self,
     ) -> tuple[nn.Module, optim.Optimizer, optim.lr_scheduler, dict[str, nn.Module]]:
         """Initialize Model, Optimizer, and LR Scheduler."""
-        logger.info("Initializing Model...")
+        logger.info("Initializing Model...\n")
         model: nn.Module = CustomModel()
         log_parameter_counts(model)
 
-        logger.info("Initializing Optimizer...")
+        logger.info("Initializing Optimizer...\n")
         optimizer: optim.Optimizer = optim.AdamW(params=model.parameters(), lr=self.lr)
 
-        logger.info("Initializing LR Scheduler...")
+        logger.info("Initializing LR Scheduler...\n")
         scheduler: optim.lr_scheduler = optim.lr_scheduler.StepLR(
             optimizer=optimizer, step_size=10, gamma=0.1
         )
@@ -83,8 +91,9 @@ class Training:
 
     def run(self) -> None:
         """Execute the complete training pipeline."""
-
+        logger.info("=" * 100)
         logger.info("Training Pipeline Starting...")
+        logger.info("=" * 100 + "\n")
 
         # Initialize hyperparameters
         self._load_configs()
@@ -97,7 +106,7 @@ class Training:
             )
 
         # Initialize datasets
-        train_set, valid_set = self._load_training_dataset()
+        train_set, valid_set = self._load_datasets()
 
         # Initialize dataloaders
         train_loader, val_loader = custom_training_dataloader(
@@ -119,6 +128,9 @@ class Training:
             checkpoint_dir=checkpoint_dir,
             tensorboard_dir=tensorboard_dir,
             result_dir=result_dir,
+            input_fn=custom_input_fn,
+            loss_fn=compute_loss,
+            metrics_fn=compute_metrics,
         )
         # Execute training loop
         trainer.train_and_validate()
